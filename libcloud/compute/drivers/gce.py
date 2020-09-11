@@ -23,6 +23,7 @@ import datetime
 import time
 import itertools
 import sys
+import pprint
 
 from libcloud.common.base import LazyObject
 from libcloud.common.google import GoogleOAuth2Credential
@@ -6461,23 +6462,28 @@ class GCENodeDriver(NodeDriver):
 
     def detach_volume(self, volume, ex_node=None):
         """
-        Detach a volume from a node.
+        Detach a volume from a node or all nodes.
 
         :param  volume: Volume object to detach
         :type   volume: :class:`StorageVolume`
 
-        :keyword  ex_node: Node object to detach volume from (required)
+        :keyword  ex_node: Single node object to detach volume from.
+                           Detaches all volume users if absent.
         :type     ex_node: :class:`Node`
 
         :return:  True if successful
         :rtype:   ``bool``
         """
-        if not ex_node:
-            return False
-        request = '/zones/%s/instances/%s/detachDisk?deviceName=%s' % (
-            ex_node.extra['zone'].name, ex_node.name, volume.name)
+        if ex_node:
+            users = [ex_node.name]
+        else:
+            users = [el.split('/')[-1] for el in volume.extra['users']]
 
-        self.connection.async_request(request, method='POST', data='ignored')
+        for user in users:
+            request = '/zones/%s/instances/%s/detachDisk?deviceName=%s' % (
+                volume.extra['zone'].name, user, volume.name)
+
+            self.connection.async_request(request, method='POST', data='ignored')
         return True
 
     def ex_set_volume_auto_delete(self, volume, node, auto_delete=True):
