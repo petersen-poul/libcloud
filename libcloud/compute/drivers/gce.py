@@ -23,7 +23,6 @@ import datetime
 import time
 import itertools
 import sys
-import pprint
 
 from libcloud.common.base import LazyObject
 from libcloud.common.google import GoogleOAuth2Credential
@@ -6460,6 +6459,40 @@ class GCENodeDriver(NodeDriver):
         )
         return True
 
+    def _get_devicename(self, volume, name=None, node=None):
+        """
+        Find the deviceName associated with a volume attachment.
+
+        :param volume: Volume object to detach
+        :type  volume: :class:`StorageVolume`
+
+        :param name: The Node name (instance) to which the volume is attached.
+        :type name: ``str``
+
+        :param name: The Node object if known instead of the name
+        :type name: ``str``
+
+        :return:  deviceName if found or None
+        :rtype:   ``str``
+        """
+
+        if name:
+            request = '/zones/%s/instances/%s' % (volume.extra['zone'].name, name)
+            node = self.connection.request(request, method='GET').object
+            disks = node['disks']
+        elif node:
+            disks = node.extra['disks']
+        else:
+            raise ValueError('One of \'name\' or \'node\' must be specified')
+
+        for disk in disks:
+            if disk['source'].split('/')[-1] == volume.name:
+                break
+        else:
+            return None
+
+        return disk['deviceName']
+
     def detach_volume(self, volume, ex_node=None):
         """
         Detach a volume from a node or all nodes.
@@ -6475,27 +6508,17 @@ class GCENodeDriver(NodeDriver):
         :rtype:   ``bool``
         """
         if ex_node:
-            users = [ex_node.name]
+            instance_names = [ex_node.name]
+            device_names = [self._get_devicename(volume, node=ex_node)]
         else:
-            users = [el.split('/')[-1] for el in volume.extra['users']]
+            instance_names = [el.split('/')[-1] for el in volume.extra['users']]
+            device_names = [self._get_devicename(volume, name=el) for el in instance_names]
 
-        for user in users:
-            # It is possible for the deviceName to be different from the volume name.
-            # The only way to map the deviceName is from the instance metadata
-            # See: https://cloud.google.com/compute/docs/reference/rest/v1/instances/detachDisk
-            request = '/zones/%s/instances/%s' % (volume.extra['zone'].name, user)
-            node = self.connection.request(request, method='GET').object
-            for disk in node['disks']:
-                if disk['source'].split('/')[-1] == volume.name:
-                    break
-            else:
-                raise ResourceNotFoundError('Could not find disk attachment \'%s\' -> \'%s\'' % (
-                    volume.name, user), None, None)
-
+        for instance_name, device_name in zip(instance_names, device_names):
             request = '/zones/%s/instances/%s/detachDisk?deviceName=%s' % (
-                volume.extra['zone'].name, user, disk['deviceName'])
-
+                volume.extra['zone'].name, instance_name, device_name)
             self.connection.async_request(request, method='POST', data='ignored')
+
         return True
 
     def ex_set_volume_auto_delete(self, volume, node, auto_delete=True):
@@ -6517,7 +6540,7 @@ class GCENodeDriver(NodeDriver):
         request = '/zones/%s/instances/%s/setDiskAutoDelete' % (
             node.extra['zone'].name, node.name)
         delete_params = {
-            'deviceName': volume.name,
+            'deviceName': self._get_devicename(volume, node=node),
             'autoDelete': auto_delete,
         }
         self.connection.async_request(request, method='POST',
