@@ -6480,8 +6480,20 @@ class GCENodeDriver(NodeDriver):
             users = [el.split('/')[-1] for el in volume.extra['users']]
 
         for user in users:
+            # It is possible for the deviceName to be different from the volume name.
+            # The only way to map the deviceName is from the instance metadata
+            # See: https://cloud.google.com/compute/docs/reference/rest/v1/instances/detachDisk
+            request = '/zones/%s/instances/%s' % (volume.extra['zone'].name, user)
+            node = self.connection.request(request, method='GET').object
+            for disk in node['disks']:
+                if disk['source'].split('/')[-1] == volume.name:
+                    break
+            else:
+                raise ResourceNotFoundError('Could not find disk attachment \'%s\' -> \'%s\'' % (
+                    volume.name, user), None, None)
+
             request = '/zones/%s/instances/%s/detachDisk?deviceName=%s' % (
-                volume.extra['zone'].name, user, volume.name)
+                volume.extra['zone'].name, user, disk['deviceName'])
 
             self.connection.async_request(request, method='POST', data='ignored')
         return True
