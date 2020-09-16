@@ -9603,4 +9603,5 @@ class GCENodeDriver(NodeDriver):
         'compute#targetPool': _to_targetpool,
         'compute#urlMap': _to_urlmap,
         'compute#zone': _to_zone,
+        'compute#healthCheck': _to_healthcheck,
     }
