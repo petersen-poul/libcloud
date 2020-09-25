@@ -3814,7 +3814,7 @@ class GCENodeDriver(NodeDriver):
         return self.ex_get_route(name)
 
     def ex_create_sslcertificate(self, name, certificate=None,
-                                 private_key=None, description=None):
+                                 private_key=None, managed_domain=None, description=None):
         """
         Creates a SslCertificate resource in the specified project using the
         data included in the request.
@@ -3858,9 +3858,15 @@ class GCENodeDriver(NodeDriver):
         request = "/global/sslCertificates" % ()
         request_data = {}
         request_data['name'] = name
-        request_data['certificate'] = certificate
-        request_data['privateKey'] = private_key
         request_data['description'] = description
+
+        if managed_domain:
+            request_data['managed'] = {'domains': managed_domain}
+            request_data['type'] = "MANAGED"
+        else:
+            request_data['certificate'] = certificate
+            request_data['privateKey'] = private_key
+            request_data['type'] = "SELF_MANAGED"
 
         self.connection.async_request(request, method='POST',
                                       data=request_data)
@@ -8781,7 +8787,7 @@ class GCENodeDriver(NodeDriver):
 
         return GCESslCertificate(id=sslcertificate['id'],
                                  name=sslcertificate['name'],
-                                 certificate=sslcertificate['certificate'],
+                                 certificate=sslcertificate.get('certificate'),
                                  driver=self, extra=extra)
 
     def _to_subnetwork(self, subnetwork):
