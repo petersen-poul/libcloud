@@ -568,7 +568,7 @@ class GCEHealthCheck(UuidMixin):
     """A GCE Http Health Check class."""
 
     def __init__(self, id, name, path, port, interval, timeout,
-                 unhealthy_threshold, healthy_threshold, driver, extra=None):
+                 unhealthy_threshold, healthy_threshold, protocol, legacy, driver, extra=None):
         self.id = str(id)
         self.name = name
         self.path = path
@@ -578,6 +578,8 @@ class GCEHealthCheck(UuidMixin):
         self.unhealthy_threshold = unhealthy_threshold
         self.healthy_threshold = healthy_threshold
         self.driver = driver
+        self.protocol = protocol
+        self.legacy = legacy
         self.extra = extra or {}
         UuidMixin.__init__(self)
 
@@ -2311,7 +2313,7 @@ class GCENodeDriver(NodeDriver):
 
         return list_backendservices
 
-    def ex_list_healthchecks(self):
+    def ex_list_healthchecks(self, legacy=True):
         """
         Return the list of health checks.
 
@@ -2319,7 +2321,10 @@ class GCENodeDriver(NodeDriver):
         :rtype: ``list`` of :class:`GCEHealthCheck`
         """
         list_healthchecks = []
-        request = '/global/httpHealthChecks'
+        if legacy:
+            request = '/global/httpHealthChecks'
+        else:
+            request = '/global/healthChecks'
         response = self.connection.request(request, method='GET').object
         list_healthchecks = [self._to_healthcheck(h)
                              for h in response.get('items', [])]
@@ -3202,7 +3207,7 @@ class GCENodeDriver(NodeDriver):
     def ex_create_healthcheck(self, name, host=None, path=None, port=None,
                               interval=None, timeout=None,
                               unhealthy_threshold=None, healthy_threshold=None,
-                              description=None):
+                              description=None, protocol=None, legacy=True):
         """
         Create an Http Health Check.
 
@@ -3240,6 +3245,7 @@ class GCENodeDriver(NodeDriver):
         :rtype:   :class:`GCEHealthCheck`
         """
         hc_data = {}
+        type_data = {}
         hc_data['name'] = name
         if host:
             hc_data['host'] = host
@@ -3247,17 +3253,24 @@ class GCENodeDriver(NodeDriver):
             hc_data['description'] = description
         # As of right now, the 'default' values aren't getting set when called
         # through the API, so set them explicitly
-        hc_data['requestPath'] = path or '/'
-        hc_data['port'] = port or 80
-        hc_data['checkIntervalSec'] = interval or 5
-        hc_data['timeoutSec'] = timeout or 5
-        hc_data['unhealthyThreshold'] = unhealthy_threshold or 2
-        hc_data['healthyThreshold'] = healthy_threshold or 2
+        hc_data['type'] = protocol.upper() or 'HTTP'
 
-        request = '/global/httpHealthChecks'
+        type_data['requestPath'] = path or '/'
+        type_data['port'] = port or 80
+        type_data['checkIntervalSec'] = interval or 5
+        type_data['timeoutSec'] = timeout or 5
+        type_data['unhealthyThreshold'] = unhealthy_threshold or 2
+        type_data['healthyThreshold'] = healthy_threshold or 2
+
+        if legacy:
+            request = '/global/httpHealthChecks'
+            hc_data.update(type_data)
+        else:
+            request = '/global/healthChecks'
+            hc_data['%sHealthCheck' % protocol.lower()] = type_data
 
         self.connection.async_request(request, method='POST', data=hc_data)
-        return self.ex_get_healthcheck(name)
+        return self.ex_get_healthcheck(name, legacy=legacy)
 
     def ex_create_firewall(self, name, allowed=None, denied=None,
                            network='default', target_ranges=None,
@@ -5534,7 +5547,7 @@ class GCENodeDriver(NodeDriver):
 
         return self.ex_get_autoscaler(autoscaler.name, autoscaler.zone)
 
-    def ex_update_healthcheck(self, healthcheck):
+    def ex_update_healthcheck(self, healthcheck, legacy=True):
         """
         Update a health check with new values.
 
@@ -5560,11 +5573,14 @@ class GCENodeDriver(NodeDriver):
         if healthcheck.extra['description']:
             hc_data['description'] = healthcheck.extra['description']
 
-        request = '/global/httpHealthChecks/%s' % (healthcheck.name)
+        if legacy:
+            request = '/global/httpHealthChecks'
+        else:
+            request = '/global/healthChecks'
 
         self.connection.async_request(request, method='PUT', data=hc_data)
 
-        return self.ex_get_healthcheck(healthcheck.name)
+        return self.ex_get_healthcheck(healthcheck.name, legacy=legacy)
 
     def ex_update_firewall(self, firewall):
         """
@@ -6668,7 +6684,7 @@ class GCENodeDriver(NodeDriver):
 
         return True
 
-    def ex_destroy_healthcheck(self, healthcheck):
+    def ex_destroy_healthcheck(self, healthcheck, legacy=True):
         """
         Destroy a healthcheck.
 
@@ -6678,7 +6694,10 @@ class GCENodeDriver(NodeDriver):
         :return:  True if successful
         :rtype:   ``bool``
         """
-        request = '/global/httpHealthChecks/%s' % (healthcheck.name)
+        if legacy:
+            request = '/global/httpHealthChecks'
+        else:
+            request = '/global/healthChecks'
         self.connection.async_request(request, method='DELETE')
         return True
 
@@ -7219,7 +7238,7 @@ class GCENodeDriver(NodeDriver):
         response = self.connection.request(request, method='GET').object
         return self._to_backendservice(response)
 
-    def ex_get_healthcheck(self, name):
+    def ex_get_healthcheck(self, name, legacy=True):
         """
         Return a HealthCheck object based on the healthcheck name.
 
@@ -7229,7 +7248,11 @@ class GCENodeDriver(NodeDriver):
         :return:  A GCEHealthCheck object
         :rtype:   :class:`GCEHealthCheck`
         """
-        request = '/global/httpHealthChecks/%s' % (name)
+        if legacy:
+            request = '/global/httpHealthChecks'
+        else:
+            request = '/global/healthChecks'
+        request += '/%s' % name
         response = self.connection.request(request, method='GET').object
         return self._to_healthcheck(response)
 
@@ -8658,14 +8681,22 @@ class GCENodeDriver(NodeDriver):
         extra['description'] = healthcheck.get('description')
         extra['host'] = healthcheck.get('host')
 
+        protocol = healthcheck.get('type', 'HTTP')
+        legacy = '/httpHealthChecks/' in healthcheck.get('selfLink', "")
+
+        if legacy:
+            type_data = healthcheck
+        else:
+            type_data = healthcheck.get('%sHealthCheck' % protocol.lower())
+
         return GCEHealthCheck(
             id=healthcheck['id'], name=healthcheck['name'],
-            path=healthcheck.get('requestPath'), port=healthcheck.get('port'),
-            interval=healthcheck.get('checkIntervalSec'),
-            timeout=healthcheck.get('timeoutSec'),
-            unhealthy_threshold=healthcheck.get('unhealthyThreshold'),
-            healthy_threshold=healthcheck.get('healthyThreshold'), driver=self,
-            extra=extra)
+            path=type_data.get('requestPath'), port=type_data.get('port'),
+            interval=type_data.get('checkIntervalSec'),
+            timeout=type_data.get('timeoutSec'),
+            unhealthy_threshold=type_data.get('unhealthyThreshold'),
+            healthy_threshold=type_data.get('healthyThreshold'),
+            legacy=legacy, protocol=protocol, driver=self, extra=extra)
 
     def _to_firewall(self, firewall):
         """
@@ -9589,6 +9620,7 @@ class GCENodeDriver(NodeDriver):
         'compute#firewall': _to_firewall,
         'compute#forwardingRule': _to_forwarding_rule,
         'compute#httpHealthCheck': _to_healthcheck,
+        'compute#healthCheck': _to_healthcheck,
         'compute#image': _to_node_image,
         'compute#instance': _to_node,
         'compute#machineType': _to_node_size,
@@ -9603,5 +9635,4 @@ class GCENodeDriver(NodeDriver):
         'compute#targetPool': _to_targetpool,
         'compute#urlMap': _to_urlmap,
         'compute#zone': _to_zone,
-        'compute#healthCheck': _to_healthcheck,
     }
