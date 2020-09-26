@@ -5236,7 +5236,7 @@ class GCENodeDriver(NodeDriver):
         return self.ex_get_targethttpproxy(name)
 
     def ex_create_targethttpsproxy(self, name, urlmap, sslcertificates,
-                                   description=None):
+                                   policy=None, description=None):
         """
         Creates a TargetHttpsProxy resource in the specified project
         using the data included in the request.
@@ -5277,14 +5277,20 @@ class GCENodeDriver(NodeDriver):
         :rtype: :class:`GCETargetHttpsProxy`
         """
 
-        request = "/global/targetHttpsProxies" % ()
         request_data = {}
+
+        if policy:
+            request = "/global/sslPolicies/%s" % policy
+            sslPolicy = self.connection.request(request, method='GET').object['selfLink']
+            request_data['sslPolicy'] = sslPolicy
+
         request_data['name'] = name
         request_data['description'] = description
         request_data['sslCertificates'] = [x.extra['selfLink']
                                            for x in sslcertificates]
         request_data['urlMap'] = urlmap.extra['selfLink']
 
+        request = "/global/targetHttpsProxies" % ()
         self.connection.async_request(request, method='POST',
                                       data=request_data)
 
