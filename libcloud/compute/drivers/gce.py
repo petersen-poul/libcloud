@@ -8790,6 +8790,9 @@ class GCENodeDriver(NodeDriver):
         if 'description' in sslcertificate:
             extra['description'] = sslcertificate['description']
         extra['selfLink'] = sslcertificate['selfLink']
+        extra['managed'] = sslcertificate.get('managed')
+        extra['expireTime'] = sslcertificate.get('expireTime')
+        extra['subjectAlternativeNames'] = sslcertificate.get('subjectAlternativeNames', [])
 
         return GCESslCertificate(id=sslcertificate['id'],
                                  name=sslcertificate['name'],
