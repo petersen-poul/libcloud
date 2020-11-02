@@ -23,6 +23,7 @@ import logging
 import os
 import codecs
 import atexit
+import subprocess
 
 from libcloud.base import DriverType  # NOQA
 from libcloud.base import DriverTypeFactoryMap  # NOQA
@@ -46,8 +47,10 @@ __all__ = [
     'enable_debug'
 ]
 
-__version__ = '2.8.3'
-
+try:
+    __version__ = subprocess.check_output('git describe 2>/dev/null', shell=True).strip()
+except:
+    __version__ = '2.8.3'
 
 def enable_debug(fo):
     """
