@@ -17,6 +17,7 @@ import os
 import sys
 import re
 import fnmatch
+import libcloud
 
 import setuptools
 from setuptools import setup
@@ -224,25 +225,6 @@ if PY2_pre_27 or PY3_pre_34:
           ', '.join(SUPPORTED_VERSIONS))
     sys.exit(1)
 
-
-def read_version_string():
-    version = None
-    cwd = os.path.dirname(os.path.abspath(__file__))
-    version_file = os.path.join(cwd, 'libcloud/__init__.py')
-
-    with open(version_file) as fp:
-        content = fp.read()
-
-    match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]",
-                      content, re.M)
-
-    if match:
-        version = match.group(1)
-        return version
-
-    raise Exception('Cannot find version in libcloud/__init__.py')
-
-
 def forbid_publish():
     argv = sys.argv
     if 'upload'in argv:
@@ -286,7 +268,7 @@ pytest_runner = ['pytest-runner'] if needs_pytest else []
 
 setup(
     name='apache-libcloud',
-    version=read_version_string(),
+    version=libcloud.__version__,
     description='A standard Python library that abstracts away differences' +
                 ' among multiple cloud provider APIs. For more information' +
                 ' and documentation, please see http://libcloud.apache.org',

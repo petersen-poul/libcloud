@@ -48,7 +48,8 @@ __all__ = [
 ]
 
 try:
-    __version__ = subprocess.check_output('git describe 2>/dev/null', shell=True).strip()
+    # Use the count of commits since the 2.8.3 tag
+    __version__ = '2.8.3.dev%s' % subprocess.check_output(['git', 'rev-list', 'refs/tags/v2.8.3..HEAD', '--count']).strip()
 except:
     __version__ = '2.8.3'
 
