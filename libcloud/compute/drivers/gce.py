@@ -3204,6 +3204,36 @@ class GCENodeDriver(NodeDriver):
                                       data=backendservice_data)
         return self.ex_get_backendservice(name)
 
+    def ex_update_backendservice(self, backendservice):
+        """
+        Update a backendservice with new values.
+
+        To update, change the attributes of the backendservice object and pass
+        the updated object to the method.
+
+        :param  backendservice: A backendservice object with updated values.
+        :type   backendservice: :class:`GCEBackendService`
+
+        :return:  An object representing the new state of the backendservice.
+        :rtype:   :class:`GCEBackendService`
+        """
+
+        bes_data = {}
+
+        for prop in ['name', 'port', 'port_name', 'protocol', 'timeout']:
+            bes_data[prop] = getattr(backendservice, prop)
+
+        for ext in ['description', 'fingerprint']:
+            bes_data[ext] = backendservice.extra[ext]
+
+        bes_data['backends'] = [be.to_backend_dict() if isinstance(be, GCEBackend) else be for be in backendservice.backends ]
+        bes_data['healthChecks'] = [hc.extra['selfLink'] for hc in backendservice.healthchecks]
+
+        request = '/global/backendServices/%s' % backendservice.name
+        self.connection.async_request(request, method='PUT', data=bes_data)
+
+        return self.ex_get_backendservice(backendservice.name)
+
     def ex_create_healthcheck(self, name, host=None, path=None, port=None,
                               interval=None, timeout=None,
                               unhealthy_threshold=None, healthy_threshold=None,
