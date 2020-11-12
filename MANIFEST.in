@@ -5,6 +5,7 @@ include CHANGES.rst
 include README.rst
 include tox.ini
 include .pylintrc
+include libcloud/.version
 include requirements-tests.txt
 include libcloud/data/pricing.json
 prune libcloud/test/secrets.py

@@ -47,11 +47,16 @@ __all__ = [
     'enable_debug'
 ]
 
+version_file = '%s/.version' % os.path.dirname(os.path.abspath(__file__))
+
 try:
     # Use the count of commits since the 2.8.3 tag
     __version__ = '2.8.3.dev%s' % subprocess.check_output(['git', 'rev-list', 'refs/tags/v2.8.3..HEAD', '--count']).strip()
+    with open(version_file, "w") as f:
+        f.write(__version__)
 except:
-    __version__ = '2.8.3'
+    with open(version_file, "r") as f:
+        __version__ = f.read()
 
 def enable_debug(fo):
     """
